@@ -2,7 +2,6 @@ import json
 import urllib.request
 import os
 
-# Fungsi untuk memuat lookup dengan aman
 def load_lookup(filename):
     try:
         with open(f'lookup/{filename}', 'r', encoding='utf-8') as f:
@@ -22,31 +21,39 @@ def main():
 
     # 2. Ambil data dari API SIBI
     url = "https://api.buku.cloudapp.web.id/api/catalogue/getTextBooks?limit=2000&type_pdf&order_by=updated_at"
-    print(f"Mengambil data dari: {url}")
-    req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+    print(f"Mencoba mengambil data dari API...")
+    
+    req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
     
     try:
         with urllib.request.urlopen(req, timeout=30) as response:
+            print(f"Status HTTP: {response.status}")
             raw_text = response.read().decode('utf-8')
+            print(f"Panjang respons: {len(raw_text)} karakter")
+            print(f"Cuplikan 200 karakter pertama dari API:\n{raw_text[:200]}")
+            
             raw_data = json.loads(raw_text)
     except Exception as e:
         print(f"GAGAL mengambil data dari API: {e}")
         return
 
-    # Cek struktur respons API (kadang dibungkus dalam 'data', 'items', atau langsung list)
+    # Cek struktur respons API
     if isinstance(raw_data, dict):
+        print("Respons berupa Dictionary. Mencari kunci 'data' atau 'items'...")
         if 'data' in raw_data:
             raw_data = raw_data['data']
         elif 'items' in raw_data:
             raw_data = raw_data['items']
 
     if not isinstance(raw_data, list):
-        print("Format API tidak dikenali (bukan list).")
+        print("Format API tidak dikenali (Bukan List/Array). Script berhenti.")
         return
+
+    print(f"Berhasil membaca list. Total ada {len(raw_data)} data buku mentah.")
 
     cleaned_books = []
     
-    # 3. Proses dan bersihkan data
+    # 3. Proses data
     for book in raw_data:
         if not isinstance(book, dict): continue
         
@@ -59,7 +66,6 @@ def main():
         class_id = book.get('classId', '')
         subject_id = book.get('subjectId', '')
         
-        # Ambil URL Cover & PDF dengan aman (mencoba beberapa kemungkinan field)
         cover_url = ''
         if isinstance(book.get('physicalDescription'), dict):
             cover_url = book.get('physicalDescription', {}).get('coverImage', '')
@@ -81,17 +87,12 @@ def main():
         }
         cleaned_books.append(cleaned_book)
 
-    # 4. Simpan ke file JSON
+    # 4. Simpan ke file
     os.makedirs('data', exist_ok=True)
     with open('data/books_catalog.json', 'w', encoding='utf-8') as f:
         json.dump(cleaned_books, f, indent=2, ensure_ascii=False)
         
-    print(f"Berhasil memproses {len(cleaned_books)} buku.")
-    
-    # Print contoh 1 buku untuk mengecek apakah field PDF dan Cover terisi
-    if len(cleaned_books) > 0:
-        print("\nContoh data pertama:")
-        print(json.dumps(cleaned_books[0], indent=2))
+    print(f"Berhasil memproses dan menyimpan {len(cleaned_books)} buku.")
 
 if __name__ == "__main__":
     main()
