@@ -14,36 +14,27 @@ def load_lookup(filename):
         return []
 
 def main():
-    # 1. Muat data lookup
     levels = {item.get('schoolLevelId', ''): item.get('schoolLevelName', '') for item in load_lookup('school_levels.json') if isinstance(item, dict)}
     classes = {item.get('classId', ''): item.get('className', '') for item in load_lookup('school_classes.json') if isinstance(item, dict)}
     subjects = {item.get('subjectId', ''): item.get('subjectName', '') for item in load_lookup('subjects.json') if isinstance(item, dict)}
 
-    # 2. Ambil data dari API SIBI
     url = "https://api.buku.cloudapp.web.id/api/catalogue/getTextBooks?limit=2000&type_pdf&order_by=updated_at"
-    print(f"Mencoba mengambil data dari API...")
-    
     req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
     
     try:
         with urllib.request.urlopen(req, timeout=30) as response:
-            print(f"Status HTTP: {response.status}")
             raw_text = response.read().decode('utf-8')
-            print(f"Panjang respons: {len(raw_text)} karakter")
-            print(f"Cuplikan 200 karakter pertama dari API:\n{raw_text[:200]}")
-            
             raw_data = json.loads(raw_text)
     except Exception as e:
         print(f"GAGAL mengambil data dari API: {e}")
         return
 
-    # Cek struktur respons API
+    # Perbaikan: API SIBI menggunakan key 'results'
     if isinstance(raw_data, dict):
-        print("Respons berupa Dictionary. Mencari kunci 'data' atau 'items'...")
-        if 'data' in raw_data:
+        if 'results' in raw_data:
+            raw_data = raw_data['results']
+        elif 'data' in raw_data:
             raw_data = raw_data['data']
-        elif 'items' in raw_data:
-            raw_data = raw_data['items']
 
     if not isinstance(raw_data, list):
         print("Format API tidak dikenali (Bukan List/Array). Script berhenti.")
@@ -51,35 +42,38 @@ def main():
 
     print(f"Berhasil membaca list. Total ada {len(raw_data)} data buku mentah.")
 
+    # --- FITUR DEBUG: Mencetak 1 buku pertama secara utuh ---
+    if len(raw_data) > 0:
+        print("\n=== CONTOH DATA MENTAH BUKU PERTAMA ===")
+        print(json.dumps(raw_data[0], indent=2))
+        print("=======================================\n")
+    # --------------------------------------------------------
+
     cleaned_books = []
     
-    # 3. Proses data
     for book in raw_data:
         if not isinstance(book, dict): continue
         
+        # Kita gunakan nama field sementara, nanti kita perbaiki setelah melihat hasil debug di atas
         book_id = book.get('id', '')
         title = book.get('title', '')
         author = book.get('author', '')
-        description = book.get('description', '')
+        description = book.get('description', book.get('sinopsis', '')) # Toleransi jika namanya sinopsis
         
-        level_id = book.get('schoolLevelId', '')
-        class_id = book.get('classId', '')
-        subject_id = book.get('subjectId', '')
+        # Toleransi nama field untuk cover
+        cover_url = book.get('image', book.get('cover', ''))
         
-        cover_url = ''
-        if isinstance(book.get('physicalDescription'), dict):
-            cover_url = book.get('physicalDescription', {}).get('coverImage', '')
-            
-        pdf_url = book.get('pdfUrl', book.get('url', book.get('file', '')))
+        # Toleransi nama field untuk PDF
+        pdf_url = book.get('pdf', book.get('file_pdf', book.get('url', '')))
         
         cleaned_book = {
             "id": book_id,
             "title": title,
             "author": author,
             "curriculum": "Kurikulum Merdeka",
-            "level": levels.get(level_id, "Lainnya"),
-            "grade": classes.get(class_id, "-"),
-            "subject": subjects.get(subject_id, "Umum"),
+            "level": "Lainnya", # Sementara
+            "grade": "-",       # Sementara
+            "subject": "Umum",  # Sementara
             "synopsis": description,
             "cover_url": cover_url,
             "pdf_url": pdf_url,
